@@ -12,11 +12,14 @@ class Database:
             url=url, pool_pre_ping=True
         )
 
-        self.session_factory = async_sessionmaker(
+        self._session_factory = async_sessionmaker(
             bind=self.engine,
             class_=AsyncSession,
             expire_on_commit=False
         )
+
+    def create_session(self) -> AsyncSession:
+        return self._session_factory()
 
     async def dispose(self) -> None:
         await self.engine.dispose()

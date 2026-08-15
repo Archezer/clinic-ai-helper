@@ -33,7 +33,6 @@ appointment booking, conversation history, and human handoff.
 - Never give the LLM direct database or arbitrary SQL access.
 - Keep API, orchestration, business rules, integrations, and persistence separate.
 - Use one `AsyncSession` per request or unit of work.
-- Manage database schemas through Alembic, not startup `create_all()` calls.
 - Convert provider failures into application exceptions and safe HTTP responses.
 - Add isolated tests; normal tests must not call OpenRouter.
 - Preserve user changes and avoid unrelated rewrites.
@@ -48,8 +47,3 @@ appointment booking, conversation history, and human handoff.
 
 Use the narrowest relevant check, then run the full suite when practical:
 
-```powershell
-uv run pytest -v
-uv run uvicorn app.main:app --reload
-docker compose up -d postgres
-```
