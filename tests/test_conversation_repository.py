@@ -5,7 +5,7 @@ from app.models import Conversation
 from app.repositories import ConversationRepository
 
 
-def test_gets_active_conversation_by_external_user() -> None:
+def test_gets_open_conversation_by_external_user() -> None:
     conversation = Conversation(
         channel="messenger",
         external_user_id="facebook-user-123",
@@ -17,7 +17,7 @@ def test_gets_active_conversation_by_external_user() -> None:
     repository = ConversationRepository(session)
 
     found_conversation = asyncio.run(
-        repository.get_active_by_external_user(
+        repository.get_open_by_external_user(
             channel="messenger",
             external_user_id="facebook-user-123",
         )
@@ -28,7 +28,7 @@ def test_gets_active_conversation_by_external_user() -> None:
     result.scalar_one_or_none.assert_called_once_with()
 
 
-def test_returns_none_when_active_conversation_does_not_exist() -> None:
+def test_returns_none_when_open_conversation_does_not_exist() -> None:
     result = MagicMock()
     result.scalar_one_or_none.return_value = None
     session = MagicMock()
@@ -36,7 +36,7 @@ def test_returns_none_when_active_conversation_does_not_exist() -> None:
     repository = ConversationRepository(session)
 
     found_conversation = asyncio.run(
-        repository.get_active_by_external_user(
+        repository.get_open_by_external_user(
             channel="messenger",
             external_user_id="unknown-user",
         )
@@ -45,7 +45,7 @@ def test_returns_none_when_active_conversation_does_not_exist() -> None:
     assert found_conversation is None
 
 
-def test_returns_existing_active_conversation() -> None:
+def test_returns_existing_open_conversation() -> None:
     conversation = Conversation(
         channel="messenger",
         external_user_id="facebook-user-123",
@@ -55,12 +55,12 @@ def test_returns_existing_active_conversation() -> None:
     session.flush = AsyncMock()
 
     repository = ConversationRepository(session)
-    repository.get_active_by_external_user = AsyncMock(
+    repository.get_open_by_external_user = AsyncMock(
         return_value=conversation,
     )
 
     result = asyncio.run(
-        repository.get_or_create_active(
+        repository.get_or_create_open(
             channel="messenger",
             external_user_id="facebook-user-123",
         )
@@ -68,7 +68,7 @@ def test_returns_existing_active_conversation() -> None:
 
     assert result is conversation
 
-    repository.get_active_by_external_user.assert_awaited_once_with(
+    repository.get_open_by_external_user.assert_awaited_once_with(
         channel="messenger",
         external_user_id="facebook-user-123",
     )
@@ -76,17 +76,17 @@ def test_returns_existing_active_conversation() -> None:
     session.flush.assert_not_awaited()
 
 
-def test_creates_conversation_when_active_one_does_not_exist() -> None:
+def test_creates_conversation_when_open_one_does_not_exist() -> None:
     session = MagicMock()
     session.flush = AsyncMock()
 
     repository = ConversationRepository(session)
-    repository.get_active_by_external_user = AsyncMock(
+    repository.get_open_by_external_user = AsyncMock(
         return_value=None,
     )
 
     result = asyncio.run(
-        repository.get_or_create_active(
+        repository.get_or_create_open(
             channel="messenger",
             external_user_id="new-facebook-user",
         )

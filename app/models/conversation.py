@@ -26,6 +26,13 @@ class MessageRole(StrEnum):
     ASSISTANT = "assistant"
     HUMAN = "human"
 
+
+class BookingStage(StrEnum):
+    IDLE = "idle"
+    AWAITING_NAME = "awaiting_name"
+    AWAITING_PHONE = "awaiting_phone"
+    AWAITING_DATETIME = "awaiting_datetime"
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
@@ -54,6 +61,18 @@ class Conversation(Base):
         nullable=False,
         default=ConversationStatus.ACTIVE,
         server_default=ConversationStatus.ACTIVE.value,
+    )
+    booking_stage: Mapped[BookingStage] = mapped_column(
+        Enum(
+            BookingStage,
+            name="booking_stage",
+            values_callable=lambda enum_class: [
+                item.value for item in enum_class
+            ],
+        ),
+        nullable=False,
+        default=BookingStage.IDLE,
+        server_default=BookingStage.IDLE.value,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -87,6 +106,11 @@ class Message(Base):
         ),
         nullable=False,
         index=True
+    )
+    external_message_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        unique=True,
     )
     role: Mapped[MessageRole] = mapped_column(
         Enum(
