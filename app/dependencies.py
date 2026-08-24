@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Database
 from app.integrations.messenger_client import MessengerClient
+from app.integrations.fake_messenger import FakeMessageSender
 from app.repositories import (
     AppointmentRepository,
     ConversationRepository,
@@ -19,6 +21,7 @@ from app.services.chat import ChatService
 from app.services.classifier import MessageClassifier
 from app.services.faq import FaqService
 from app.services.handoff import HandoffService
+from app.services.ports import MessageSender
 from app.services.responses import ResponseComposer
 from app.services.router import MessageRouter
 
@@ -57,16 +60,23 @@ def create_messenger_client(request: Request) -> MessengerClient:
     )
 
 
-def get_chat_service(
+def create_message_sender(request: Request) -> MessageSender:
+    if request.app.state.settings.messenger_mode == "fake":
+        return FakeMessageSender()
+    return create_messenger_client(request)
+
+
+def create_chat_service(
     request: Request,
-    session: DatabaseSession,
+    session: AsyncSession,
+    message_sender: MessageSender,
 ) -> ChatService:
     return ChatService(
         classifier=get_message_classifier(request),
         router=MessageRouter(),
         conversation_repository=ConversationRepository(session),
         message_repository=MessageRepository(session),
-        message_sender=create_messenger_client(request),
+        message_sender=message_sender,
         response_composer=ResponseComposer(),
         booking_service=BookingService(
             patient_repository=PatientRepository(session),
@@ -77,6 +87,40 @@ def get_chat_service(
             knowledge_answerer=request.app.state.rag_service,
         ),
         session=session,
+    )
+
+
+def get_chat_service(
+    request: Request,
+    session: DatabaseSession,
+) -> ChatService:
+    return create_chat_service(
+        request=request,
+        session=session,
+        message_sender=create_message_sender(request),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class FakeMessengerSession:
+    chat_service: ChatService
+    message_sender: FakeMessageSender
+
+
+def get_fake_messenger_session(
+    request: Request,
+    session: DatabaseSession,
+) -> FakeMessengerSession:
+    if request.app.state.settings.messenger_mode != "fake":
+        raise HTTPException(status_code=404, detail="Not found.")
+    message_sender = FakeMessageSender()
+    return FakeMessengerSession(
+        chat_service=create_chat_service(
+            request=request,
+            session=session,
+            message_sender=message_sender,
+        ),
+        message_sender=message_sender,
     )
 
 

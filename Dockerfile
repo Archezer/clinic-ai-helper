@@ -10,6 +10,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
+COPY migrations ./migrations
+COPY alembic.ini ./
+COPY output/pdf/clinic_faq_rag_demo.pdf ./output/pdf/clinic_faq_rag_demo.pdf
 COPY README.md ./
 
 RUN uv sync --frozen --no-dev

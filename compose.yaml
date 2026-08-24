@@ -8,25 +8,35 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/clinic_bot
+      RAG_DOCUMENT_PATH: ${RAG_DOCUMENT_PATH:-output/pdf/clinic_faq_rag_demo.pdf}
+      RAG_TOP_K: ${RAG_TOP_K:-4}
+      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.12}
+      MESSENGER_MODE: ${MESSENGER_MODE:-fake}
+      ENABLE_DEV_ROUTES: ${ENABLE_DEV_ROUTES:-false}
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@db:5432/clinic_bot
       META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
       META_GRAPH_BASE_URL: ${META_GRAPH_BASE_URL:-https://graph.facebook.com}
       META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v23.0}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
     depends_on:
       db:
         condition: service_healthy
+    command:
+      - sh
+      - -c
+      - >-
+        uv run --no-sync alembic upgrade head &&
+        uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   db:
     image: postgres:17-alpine
-    ports:
-      - "5433:5432"
     environment:
       POSTGRES_DB: clinic_bot
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

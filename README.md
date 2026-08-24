@@ -1,9 +1,13 @@
-# Clinic AI Receptionist
+# Clinic AI Helper
 
-An educational FastAPI MVP for a clinic receptionist connected to Meta
-Messenger. It classifies incoming messages with OpenRouter, keeps conversation
-history, answers only approved FAQs, collects appointment requests, and routes
-medical or operator requests to a human-controlled flow.
+An educational FastAPI MVP for a clinic receptionist. The repository contains
+two delivery modes: the original Meta Messenger integration and a web demo
+whose frontend can be hosted on GitHub Pages while the FastAPI backend runs on
+Render.
+
+The original Messenger version remains available as a separate integration;
+the current web-demo flow uses `/api/demo/chat` and does not send messages to
+Facebook.
 
 This project is not suitable for real clinical use. It does not diagnose,
 assess symptoms, recommend treatment, prescribe medication, or confirm medical
@@ -42,6 +46,53 @@ Meta webhook
 The LLM classifies intent and composes grounded answers from retrieved PDF
 excerpts. It never receives database access and never chooses SQL or
 application actions.
+
+## Web demo deployment
+
+Repository: `https://github.com/Archezer/clinic-ai-helper`
+
+Expected frontend origin:
+
+```text
+https://archezer.github.io
+```
+
+The Render backend must set:
+
+```dotenv
+MESSENGER_MODE=fake
+ENABLE_DEV_ROUTES=true
+CORS_ALLOWED_ORIGINS=https://archezer.github.io
+```
+
+The web demo endpoint is:
+
+```text
+POST /api/demo/chat
+```
+
+The OpenRouter key belongs only in Render environment variables. It must never
+be placed in the GitHub Pages frontend.
+
+### Render
+
+The repository includes `render.yaml`. In Render, choose **New > Blueprint**
+and select this repository. Render creates the API service and PostgreSQL
+database. Provide `OPENROUTER_API_KEY` when prompted. The API service uses the
+Dockerfile and runs migrations before starting Uvicorn.
+
+The expected API URL is:
+
+```text
+https://clinic-ai-helper-api.onrender.com
+```
+
+### GitHub Pages
+
+The `frontend` directory is a standalone static site. The workflow at
+`.github/workflows/pages.yml` publishes it on pushes to `demo-deploy`. Enable GitHub
+Pages in repository settings with **Source: GitHub Actions**. The frontend is
+configured to call the Render API URL above.
 
 ## Local development
 
@@ -106,6 +157,7 @@ META_APP_SECRET=
 META_PAGE_ACCESS_TOKEN=
 META_GRAPH_BASE_URL=https://graph.facebook.com
 META_GRAPH_API_VERSION=v23.0
+MESSENGER_MODE=fake
 
 ADMIN_API_TOKEN=
 ```
@@ -131,6 +183,23 @@ intended production entry point.
 
 Delivery receipts, read receipts, echoes, and unsupported non-text events are
 acknowledged but ignored.
+
+### Local Messenger simulator
+
+Set `MESSENGER_MODE=fake` to prevent outgoing Meta API calls. Then use
+`POST /debug/messenger/messages` from Swagger with a body such as:
+
+```json
+{
+  "sender_id": "demo-user",
+  "text": "How should I prepare for an ultrasound visit?"
+}
+```
+
+The endpoint runs the real classifier, RAG, conversation persistence, booking,
+and handoff orchestration, but captures the outgoing message locally and
+returns it in `outgoing_messages`. A unique `message_id` is generated when it
+is omitted. The debug endpoint returns 404 when `MESSENGER_MODE=meta`.
 
 ### Operator API
 

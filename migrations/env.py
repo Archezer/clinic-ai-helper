@@ -7,7 +7,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import app.models
-from app.core.config import get_settings
+from app.core.config import get_settings, normalize_database_url
 from app.models.base import Base
 
 # this is the Alembic Config object, which provides
@@ -16,7 +16,7 @@ config = context.config
 
 settings = get_settings()
 
-database_url = settings.database_url.get_secret_value()
+database_url = normalize_database_url(settings.database_url.get_secret_value())
 config.set_main_option(
     'sqlalchemy.url',
     database_url.replace('%', '%%'),

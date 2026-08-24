@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clinic Receptionist Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #101318;
+      color: #edf2f7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, #263548, #101318 48%);
+    }
+
+    .shell {
+      width: min(1180px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 32px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 20px;
+    }
+
+    .panel {
+      border: 1px solid #334155;
+      border-radius: 18px;
+      background: rgba(15, 23, 42, .86);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .24);
+    }
+
+    .chat-panel { display: flex; flex-direction: column; min-height: 720px; }
+    header { padding: 26px 28px 18px; border-bottom: 1px solid #263449; }
+    h1 { margin: 0 0 7px; font-size: 24px; }
+    .subtitle { margin: 0; color: #94a3b8; font-size: 14px; }
+
+    #messages {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .message {
+      max-width: 78%;
+      padding: 13px 16px;
+      border-radius: 15px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .message.user { align-self: flex-end; background: #2563eb; }
+    .message.assistant { align-self: flex-start; background: #1e293b; }
+    .message.system { align-self: center; color: #94a3b8; font-size: 13px; }
+
+    form {
+      display: flex;
+      gap: 10px;
+      padding: 18px 22px 22px;
+      border-top: 1px solid #263449;
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid #475569;
+      border-radius: 12px;
+      padding: 13px 14px;
+      background: #0f172a;
+      color: #edf2f7;
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 0 19px;
+      background: #22c55e;
+      color: #052e16;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled { cursor: wait; opacity: .55; }
+    .events { padding: 22px; }
+    .events h2 { margin: 0 0 15px; font-size: 17px; }
+    #events { display: flex; flex-direction: column; gap: 9px; }
+    .event { padding: 11px 12px; border-radius: 11px; background: #172033; font-size: 13px; }
+    .event strong { display: block; margin-bottom: 3px; color: #93c5fd; }
+    .muted { color: #94a3b8; }
+
+    @media (max-width: 780px) {
+      .shell { grid-template-columns: 1fr; padding: 14px; }
+      .chat-panel { min-height: 650px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel chat-panel">
+      <header>
+        <h1>Clinic AI Receptionist</h1>
+        <p class="subtitle">Web demo · OpenRouter · human handoff protected</p>
+      </header>
+      <div id="messages">
+        <div class="message system">Напишите вопрос клинике, чтобы начать демонстрацию.</div>
+      </div>
+      <form id="chat-form">
+        <input id="message-input" maxlength="1000" autocomplete="off" placeholder="Например: хочу записаться на приём" required>
+        <button id="send-button" type="submit">Send</button>
+      </form>
+    </section>
+
+    <aside class="panel events">
+      <h2>Runtime events</h2>
+      <div id="events">
+        <div class="event muted">Events will appear here after the first message.</div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const form = document.querySelector("#chat-form");
+    const input = document.querySelector("#message-input");
+    const sendButton = document.querySelector("#send-button");
+    const messages = document.querySelector("#messages");
+    const events = document.querySelector("#events");
+    const sessionId = `web-demo-${crypto.randomUUID()}`;
+
+    function addMessage(role, text) {
+      const element = document.createElement("div");
+      element.className = `message ${role}`;
+      element.textContent = text;
+      messages.appendChild(element);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addEvent(title, value) {
+      const element = document.createElement("div");
+      element.className = "event";
+      element.innerHTML = `<strong>${title}</strong><span>${value}</span>`;
+      events.prepend(element);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage("user", text);
+      input.value = "";
+      sendButton.disabled = true;
+      addEvent("Request", "Sending message to backend...");
+
+      try {
+        const response = await fetch("/api/demo/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message: text }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Request failed");
+
+        addMessage("assistant", payload.reply);
+        for (const item of payload.events) {
+          addEvent(item.type, item.value);
+        }
+      } catch (error) {
+        addMessage("system", `Ошибка: ${error.message}`);
+        addEvent("Error", error.message);
+      } finally {
+        sendButton.disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>

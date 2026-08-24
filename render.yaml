@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: clinic-ai-helper-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o-mini
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: RAG_DOCUMENT_PATH
+        value: output/pdf/clinic_faq_rag_demo.pdf
+      - key: RAG_TOP_K
+        value: "4"
+      - key: RAG_MIN_SCORE
+        value: "0.12"
+      - key: MESSENGER_MODE
+        value: fake
+      - key: ENABLE_DEV_ROUTES
+        value: "true"
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://archezer.github.io
+      - key: DATABASE_URL
+        fromDatabase:
+          name: clinic-ai-helper-db
+          property: connectionString
+      - key: ADMIN_API_TOKEN
+        generateValue: true
+      - key: META_VERIFY_TOKEN
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_PAGE_ACCESS_TOKEN
+        sync: false
+
+databases:
+  - name: clinic-ai-helper-db
+    plan: free
+    databaseName: clinic_bot
+    user: clinic_bot

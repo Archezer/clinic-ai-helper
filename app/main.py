@@ -4,14 +4,18 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from openai import AsyncOpenAI
 
 from app.api.admin import router as admin_router
 from app.api.chat import router as chat_router
+from app.api.debug import router as debug_router
+from app.api.demo import router as demo_router
+from app.api.web_demo import router as web_demo_router
 from app.api.health import router as health_router
 from app.api.messenger import router as messenger_router
-from app.core.config import get_settings
+from app.core.config import get_settings, normalize_database_url
 from app.core.database import Database
 from app.services.classifier import MessageClassifier
 from app.services.exceptions import (
@@ -28,7 +32,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
 
     database = Database(
-    url=settings.database_url.get_secret_value()
+        url=normalize_database_url(settings.database_url.get_secret_value())
     )
 
     openrouter_client = AsyncOpenAI(
@@ -65,6 +69,19 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Clinic AI Receptionist",
     lifespan=lifespan,
+)
+
+cors_origins = [
+    origin.strip()
+    for origin in get_settings().cors_allowed_origins.split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Admin-Token"],
 )
 
 
@@ -119,6 +136,11 @@ async def handle_knowledge_generation_error(
 
 
 app.include_router(health_router)
-app.include_router(chat_router)
 app.include_router(messenger_router)
 app.include_router(admin_router)
+
+if get_settings().enable_dev_routes:
+    app.include_router(chat_router)
+    app.include_router(debug_router)
+    app.include_router(demo_router)
+    app.include_router(web_demo_router)
