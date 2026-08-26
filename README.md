@@ -9,6 +9,13 @@ The original Messenger version remains available as a separate integration;
 the current web-demo flow uses `/api/demo/chat` and does not send messages to
 Facebook.
 
+## Live demo
+
+- Web demo: [archezer.github.io/clinic-ai-helper](https://archezer.github.io/clinic-ai-helper/)
+- API health check: [clinic-ai-helper-api.onrender.com/health](https://clinic-ai-helper-api.onrender.com/health)
+- API documentation: [clinic-ai-helper-api.onrender.com/docs](https://clinic-ai-helper-api.onrender.com/docs)
+- Demo deployment branch: [`demo-deploy`](https://github.com/Archezer/clinic-ai-helper/tree/demo-deploy)
+
 This project is not suitable for real clinical use. It does not diagnose,
 assess symptoms, recommend treatment, prescribe medication, or confirm medical
 appointments without staff review.
@@ -49,12 +56,12 @@ application actions.
 
 ## Web demo deployment
 
-Repository: `https://github.com/Archezer/clinic-ai-helper`
+Repository: [Archezer/clinic-ai-helper](https://github.com/Archezer/clinic-ai-helper)
 
-Expected frontend origin:
+Deployed frontend:
 
 ```text
-https://archezer.github.io
+https://archezer.github.io/clinic-ai-helper/
 ```
 
 The Render backend must set:
@@ -81,7 +88,7 @@ and select this repository. Render creates the API service and PostgreSQL
 database. Provide `OPENROUTER_API_KEY` when prompted. The API service uses the
 Dockerfile and runs migrations before starting Uvicorn.
 
-The expected API URL is:
+The deployed API URL is:
 
 ```text
 https://clinic-ai-helper-api.onrender.com
