@@ -1,200 +1,331 @@
 # Clinic AI Helper
 
-An educational FastAPI MVP for a clinic receptionist. The repository contains
-two delivery modes: the original Meta Messenger integration and a web demo
-whose frontend can be hosted on GitHub Pages while the FastAPI backend runs on
-Render.
+**A production-minded AI receptionist backend built around a simple rule: the LLM can understand language, but it does not control the system.**
 
-The original Messenger version remains available as a separate integration;
-the current web-demo flow uses `/api/demo/chat` and does not send messages to
-Facebook.
+Clinic AI Helper is an end-to-end FastAPI application that combines **LLM intent classification, deterministic action routing, PDF-backed RAG, PostgreSQL conversation state, Meta Messenger integration, human handoff, and appointment intake**.
+
+Unlike a typical chatbot wrapper, the LLM never receives database access, never generates SQL, and never decides which application actions to execute. It is treated as a probabilistic component inside a deterministic backend.
 
 ## Live demo
 
-- Web demo: [archezer.github.io/clinic-ai-helper](https://archezer.github.io/clinic-ai-helper/)
-- API health check: [clinic-ai-helper-api.onrender.com/health](https://clinic-ai-helper-api.onrender.com/health)
-- API documentation: [clinic-ai-helper-api.onrender.com/docs](https://clinic-ai-helper-api.onrender.com/docs)
-- Demo deployment branch: [`demo-deploy`](https://github.com/Archezer/clinic-ai-helper/tree/demo-deploy)
+- **Web app:** [archezer.github.io/clinic-ai-helper](https://archezer.github.io/clinic-ai-helper/)
+- **Swagger API:** [clinic-ai-helper-api.onrender.com/docs](https://clinic-ai-helper-api.onrender.com/docs)
+- **Health check:** [clinic-ai-helper-api.onrender.com/health](https://clinic-ai-helper-api.onrender.com/health)
+- **Deployment branch:** [`demo-deploy`](https://github.com/Archezer/clinic-ai-helper/tree/demo-deploy)
 
-This project is not suitable for real clinical use. It does not diagnose,
-assess symptoms, recommend treatment, prescribe medication, or confirm medical
-appointments without staff review.
+> This is an educational engineering project, not a production clinical system. It does not diagnose patients, assess symptoms, recommend treatment, prescribe medication, or automatically confirm appointments.
 
-## Features
+---
 
-- Meta Messenger webhook verification and HMAC signature validation
-- idempotent handling of repeated Messenger message IDs
-- OpenRouter intent classification with Structured Outputs
-- deterministic Python action routing
-- PostgreSQL conversation and message history
-- PDF-backed RAG answers with deterministic retrieval and grounded generation
-- approved FAQ storage as a fallback knowledge source
-- patient name and phone intake
-- appointment request collection without false slot confirmation
-- human handoff queue, history, reply, and close operations
-- Messenger Send API adapter behind a testable protocol
-- request-scoped async SQLAlchemy sessions
-- Alembic migrations and isolated tests with no real provider calls
+## Why this project is non-trivial
+
+The interesting part is not calling an LLM API. The project is built around the engineering problems that appear when an AI component becomes part of a stateful backend:
+
+- **deterministic routing** — the LLM classifies intent, Python decides what the application actually does;
+- **grounded RAG** — generated answers are limited to retrieved clinic documentation;
+- **safe fallback behavior** — unsupported questions are escalated instead of hallucinated;
+- **conversation state** — PostgreSQL stores conversations, messages, appointments, FAQs, and handoff state;
+- **idempotent webhook processing** — repeated Messenger message IDs are not processed twice;
+- **provider isolation** — Meta Messenger and OpenRouter are hidden behind testable application boundaries;
+- **human handoff** — the bot stops answering once an operator takes control;
+- **async persistence** — request-scoped SQLAlchemy sessions with PostgreSQL and Alembic migrations;
+- **isolated tests** — normal test runs make no real OpenRouter, Meta, or PostgreSQL calls;
+- **deployable system** — Docker backend on Render with a separate static frontend on GitHub Pages.
+
+---
 
 ## Architecture
 
 ```text
-Meta webhook
-    -> FastAPI integration layer
-    -> ChatService orchestration
-    -> intent classifier
-    -> deterministic router
-    -> PDF RAG / FAQ / booking / handoff services
-    -> repositories
-    -> PostgreSQL
-    -> Messenger Send API
+                  ┌─────────────────────┐
+                  │   Meta Messenger    │
+                  │    or Web Demo      │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │      FastAPI        │
+                  │ integration layer   │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │     ChatService     │
+                  │   orchestration     │
+                  └──────────┬──────────┘
+                             │
+                 ┌───────────▼───────────┐
+                 │    LLM classifier     │
+                 │ structured intent only│
+                 └───────────┬───────────┘
+                             │
+                             ▼
+                 ┌───────────────────────┐
+                 │ Deterministic router  │
+                 └───────────┬───────────┘
+                             │
+       ┌─────────────────────┼──────────────────────┐
+       │                     │                      │
+       ▼                     ▼                      ▼
+   PDF RAG / FAQ        Appointment flow       Human handoff
+       │                     │                      │
+       └─────────────────────┼──────────────────────┘
+                             ▼
+                      Repositories
+                             │
+                             ▼
+                        PostgreSQL
 ```
 
-The LLM classifies intent and composes grounded answers from retrieved PDF
-excerpts. It never receives database access and never chooses SQL or
-application actions.
+### The important boundary
 
-## Web demo deployment
+The LLM has two responsibilities:
 
-Repository: [Archezer/clinic-ai-helper](https://github.com/Archezer/clinic-ai-helper)
+1. classify the user's intent using Structured Outputs;
+2. generate an answer from retrieved document excerpts when RAG has sufficient evidence.
 
-Deployed frontend:
+It **does not**:
+
+- execute SQL;
+- call repositories;
+- choose application actions;
+- confirm appointments;
+- bypass safety rules;
+- decide whether operator state should be overwritten.
+
+Those decisions remain deterministic application logic.
+
+---
+
+## Core features
+
+### AI and routing
+
+- OpenRouter intent classification with Structured Outputs
+- deterministic Python action routing
+- PDF-backed RAG
+- BM25-style local retrieval
+- grounded answer generation
+- approved database FAQ fallback
+- explicit unsupported-answer handling
+
+### Backend
+
+- FastAPI
+- async SQLAlchemy
+- PostgreSQL
+- request-scoped database sessions
+- Alembic migrations
+- Pydantic configuration and schemas
+
+### Messenger integration
+
+- Meta webhook verification
+- HMAC request-signature validation
+- idempotent handling of duplicate Messenger message IDs
+- filtering of echoes, receipts, unsupported events, and non-text messages
+- Messenger Send API adapter behind a testable protocol
+- fake Messenger implementation for local development
+
+### Conversation workflows
+
+- persisted conversation and message history
+- patient name and phone collection
+- appointment request intake
+- `requested`, `confirmed`, and `cancelled` appointment states
+- human handoff queue
+- operator conversation history
+- operator reply and conversation close operations
+
+### Delivery
+
+- Docker
+- Docker Compose for local PostgreSQL
+- Render deployment
+- GitHub Pages frontend
+- GitHub Actions deployment workflow
+- environment-based configuration
+
+---
+
+## RAG pipeline
+
+Administrative questions are answered using a controlled retrieval pipeline:
 
 ```text
-https://archezer.github.io/clinic-ai-helper/
+PDF
+ │
+ ▼
+pypdf text extraction
+ │
+ ▼
+page-aware chunks
+ │
+ ▼
+BM25-style retrieval
+ │
+ ▼
+top-k relevant chunks
+ │
+ ▼
+LLM grounded generation
+ │
+ ▼
+supported / unsupported decision
+ │
+ ▼
+answer + deterministic source metadata
 ```
 
-The Render backend must set:
+The generator receives only the user's question and retrieved context.
 
-```dotenv
-MESSENGER_MODE=fake
-ENABLE_DEV_ROUTES=true
-CORS_ALLOWED_ORIGINS=https://archezer.github.io
-```
+If retrieval cannot provide enough evidence, the application falls back to an approved FAQ stored in PostgreSQL.
 
-The web demo endpoint is:
+If neither source can support an answer, the conversation is sent to **human handoff** rather than producing an invented clinic answer.
+
+---
+
+## Appointment flow
+
+The assistant collects:
+
+1. patient's full name;
+2. callback phone number;
+3. preferred date and time.
+
+The application creates an appointment request with:
 
 ```text
-POST /api/demo/chat
+status = requested
 ```
 
-The OpenRouter key belongs only in Render environment variables. It must never
-be placed in the GitHub Pages frontend.
+The assistant never claims that the requested slot has been booked.
 
-### Render
-
-The repository includes `render.yaml`. In Render, choose **New > Blueprint**
-and select this repository. Render creates the API service and PostgreSQL
-database. Provide `OPENROUTER_API_KEY` when prompted. The API service uses the
-Dockerfile and runs migrations before starting Uvicorn.
-
-The deployed API URL is:
+A staff member must later explicitly change the request to:
 
 ```text
-https://clinic-ai-helper-api.onrender.com
+confirmed
 ```
 
-### GitHub Pages
+or:
 
-The `frontend` directory is a standalone static site. The workflow at
-`.github/workflows/pages.yml` publishes it on pushes to `demo-deploy`. Enable GitHub
-Pages in repository settings with **Source: GitHub Actions**. The frontend is
-configured to call the Render API URL above.
-
-## Local development
-
-Requirements:
-
-- Python 3.12
-- uv
-- Docker Desktop or another PostgreSQL 17 installation
-
-Create the local environment file:
-
-```powershell
-Copy-Item .env.example .env
+```text
+cancelled
 ```
 
-Fill at least the OpenRouter and database settings. Meta values can remain
-empty when running tests.
+through the operator API.
 
-Install dependencies:
+---
 
-```powershell
-uv sync
+## Human handoff
+
+Certain conversations should not remain under automated control.
+
+Medical questions and explicit requests for a human operator move the conversation into:
+
+```text
+needs_human
 ```
 
-Start PostgreSQL:
+Once handed off:
 
-```powershell
-docker compose up -d db
+- incoming messages are still persisted;
+- the bot no longer responds over the operator;
+- staff can inspect history;
+- staff can reply;
+- staff can close the handoff.
+
+This state transition is controlled by application logic, not by free-form LLM tool calls.
+
+---
+
+## Project structure
+
+```text
+app/
+├── api/                # HTTP routes
+├── core/               # configuration and shared infrastructure
+├── integrations/       # Meta Messenger / external providers
+├── models/             # SQLAlchemy models
+├── repositories/       # persistence layer
+├── schemas/            # Pydantic schemas
+├── services/           # application and domain logic
+├── dependencies.py     # dependency wiring
+└── main.py             # FastAPI application
+
+migrations/             # Alembic migrations
+tests/                  # unit and API tests
+frontend/               # standalone web demo
+Dockerfile
+compose.yaml
+render.yaml
+pyproject.toml
 ```
 
-Apply migrations:
+---
 
-```powershell
-uv run alembic upgrade head
+## API
+
+### System
+
+```http
+GET /health
 ```
 
-Start the API:
+### Development chat API
 
-```powershell
-uv run uvicorn app.main:app --reload
+```http
+POST /chat/classify
+POST /chat/process
 ```
-
-Available locally:
-
-- API: http://127.0.0.1:8000
-- Swagger UI: http://127.0.0.1:8000/docs
-- health check: http://127.0.0.1:8000/health
-
-## Configuration
-
-```dotenv
-OPENROUTER_API_KEY=
-OPENROUTER_MODEL=openai/gpt-4o-mini
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-RAG_DOCUMENT_PATH=output/pdf/clinic_faq_rag_demo.pdf
-RAG_TOP_K=4
-RAG_MIN_SCORE=0.12
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/clinic_bot
-
-META_VERIFY_TOKEN=
-META_APP_SECRET=
-META_PAGE_ACCESS_TOKEN=
-META_GRAPH_BASE_URL=https://graph.facebook.com
-META_GRAPH_API_VERSION=v23.0
-MESSENGER_MODE=fake
-
-ADMIN_API_TOKEN=
-```
-
-Use the Graph API version supported by the Meta application when credentials
-become available. Never commit `.env` or real provider tokens.
-
-## Main endpoints
-
-### System and development
-
-- `GET /health`
-- `POST /chat/classify`
-- `POST /chat/process`
-
-The `/chat` routes are useful for development. The Messenger webhook is the
-intended production entry point.
 
 ### Messenger
 
-- `GET /webhooks/messenger` verifies the callback URL
-- `POST /webhooks/messenger` validates and processes signed events
+```http
+GET  /webhooks/messenger
+POST /webhooks/messenger
+```
 
-Delivery receipts, read receipts, echoes, and unsupported non-text events are
-acknowledged but ignored.
+### Operator API
 
-### Local Messenger simulator
+Operator routes require:
 
-Set `MESSENGER_MODE=fake` to prevent outgoing Meta API calls. Then use
-`POST /debug/messenger/messages` from Swagger with a body such as:
+```http
+X-Admin-Token: <ADMIN_API_TOKEN>
+```
+
+Available operations:
+
+```http
+GET   /admin/handoffs
+GET   /admin/conversations/{conversation_id}/messages
+POST  /admin/conversations/{conversation_id}/reply
+POST  /admin/conversations/{conversation_id}/close
+
+GET   /admin/faqs
+POST  /admin/faqs
+
+GET   /admin/appointments
+PATCH /admin/appointments/{appointment_id}
+```
+
+---
+
+## Local Messenger simulator
+
+The real Meta integration can be replaced with a fake transport:
+
+```dotenv
+MESSENGER_MODE=fake
+```
+
+Then a local message can be sent through:
+
+```http
+POST /debug/messenger/messages
+```
+
+Example:
 
 ```json
 {
@@ -203,84 +334,177 @@ Set `MESSENGER_MODE=fake` to prevent outgoing Meta API calls. Then use
 }
 ```
 
-The endpoint runs the real classifier, RAG, conversation persistence, booking,
-and handoff orchestration, but captures the outgoing message locally and
-returns it in `outgoing_messages`. A unique `message_id` is generated when it
-is omitted. The debug endpoint returns 404 when `MESSENGER_MODE=meta`.
+This executes the real application pipeline:
 
-### Operator API
-
-All operator routes require:
-
-```http
-X-Admin-Token: <ADMIN_API_TOKEN>
+```text
+message
+→ intent classification
+→ routing
+→ RAG / FAQ / booking / handoff
+→ persistence
+→ outgoing Messenger adapter
 ```
 
-- `GET /admin/handoffs`
-- `GET /admin/conversations/{conversation_id}/messages`
-- `POST /admin/conversations/{conversation_id}/reply`
-- `POST /admin/conversations/{conversation_id}/close`
-- `GET /admin/faqs`
-- `POST /admin/faqs`
-- `GET /admin/appointments`
-- `PATCH /admin/appointments/{appointment_id}`
+but captures the outgoing message locally instead of calling Meta.
 
-FAQ answers should be added only after clinic staff approve their content.
+This makes the complete workflow testable without external Messenger credentials.
 
-## RAG knowledge answers
+---
 
-Administrative FAQ messages first use the configured PDF knowledge base:
+## Testing
 
-1. `pypdf` extracts text and divides it into page-aware chunks;
-2. a local BM25-style retriever selects the most relevant chunks;
-3. OpenRouter receives only the question and retrieved context;
-4. Structured Outputs requires an explicit supported/unsupported decision;
-5. the application appends deterministic document, page, and service labels.
+Run:
 
-If retrieval or generation cannot support an answer, the service falls back to
-an approved database FAQ. If neither source answers the question, the existing
-human handoff flow is used. Normal tests mock generation and never call
-OpenRouter.
-
-## Appointment flow
-
-The assistant collects:
-
-1. full name;
-2. callback phone number;
-3. preferred date and time as text.
-
-It creates an appointment with status `requested`. It explicitly tells the
-patient that staff must confirm the time. Operators can later mark the request
-as `confirmed` or `cancelled` through the admin API.
-
-## Medical safety
-
-Messages classified as medical questions and explicit requests for a person
-immediately set the conversation status to `needs_human`. Once handed off, the
-bot stores follow-up messages but does not reply over the human operator.
-
-If an FAQ has no approved matching answer, it also enters human handoff instead
-of inventing clinic information.
-
-## Tests
-
-Run the complete suite:
-
-```powershell
+```bash
 uv run pytest -q
 ```
 
-Normal tests use stubs, `AsyncMock`, and `httpx.MockTransport`. They do not call
-OpenRouter, Meta, or a live PostgreSQL database.
+The suite covers application services, repositories, APIs, Messenger behavior, booking, handoff, FAQ logic and provider integrations.
 
-## Known production gaps
+External services are replaced with:
 
-- webhook processing is synchronous; production should use a durable queue
-- distributed delivery would benefit from a transactional outbox
-- concurrent first messages need stronger conflict recovery around unique IDs
-- admin authentication is a shared token, not staff identity and role control
-- appointment requests are not connected to a real scheduling system
-- attachments and postbacks are not implemented
-- observability, retention policies, encryption review, backups, and a formal
-  clinical/privacy assessment are required before handling real patient data
+- stubs;
+- `AsyncMock`;
+- `httpx.MockTransport`;
+- fake Messenger adapters.
+
+Normal tests do **not** call:
+
+- OpenRouter;
+- Meta APIs;
+- a live PostgreSQL instance.
+
+---
+
+## Local development
+
+### Requirements
+
+- Python 3.12
+- `uv`
+- Docker
+- PostgreSQL 17
+
+Create the environment file:
+
+```bash
+cp .env.example .env
+```
+
+Install dependencies:
+
+```bash
+uv sync
+```
+
+Start PostgreSQL:
+
+```bash
+docker compose up -d db
+```
+
+Apply migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+Start FastAPI:
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+Available locally:
+
+```text
+API        http://127.0.0.1:8000
+Swagger    http://127.0.0.1:8000/docs
+Health     http://127.0.0.1:8000/health
+```
+
+---
+
+## Configuration
+
+```dotenv
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+RAG_DOCUMENT_PATH=output/pdf/clinic_faq_rag_demo.pdf
+RAG_TOP_K=4
+RAG_MIN_SCORE=0.12
+
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/clinic_bot
+
+META_VERIFY_TOKEN=
+META_APP_SECRET=
+META_PAGE_ACCESS_TOKEN=
+META_GRAPH_BASE_URL=https://graph.facebook.com
+META_GRAPH_API_VERSION=v23.0
+
+MESSENGER_MODE=fake
+
+ADMIN_API_TOKEN=
+```
+
+Secrets belong in environment variables and must never be committed to the repository or frontend bundle.
+
+---
+
+## Deployment
+
+### Backend
+
+The FastAPI backend is deployed on Render:
+
+```text
+https://clinic-ai-helper-api.onrender.com
+```
+
+The repository includes:
+
+- `Dockerfile`
+- `render.yaml`
+
+Render creates the API service and PostgreSQL database and runs Alembic migrations before starting Uvicorn.
+
+### Frontend
+
+The static frontend is deployed with GitHub Actions to:
+
+```text
+https://archezer.github.io/clinic-ai-helper/
+```
+
+The browser communicates with the Render API over HTTPS.
+
+The OpenRouter API key exists only on the backend.
+
+---
+
+## Current production gaps
+
+This repository demonstrates the architecture but deliberately does not claim production readiness.
+
+Important remaining gaps include:
+
+- webhook work currently happens synchronously instead of through a durable queue;
+- distributed message delivery should use a transactional outbox or equivalent mechanism;
+- concurrent first-message creation needs stronger conflict recovery;
+- admin authentication uses a shared token rather than staff identities and RBAC;
+- appointment requests are not connected to a real scheduling provider;
+- attachments and Messenger postbacks are not implemented;
+- observability and alerting are minimal;
+- backups and retention policies are not defined;
+- encryption and privacy requirements require formal review;
+- real patient data would require a dedicated clinical, legal, and security assessment.
+
+---
+
+## What this project demonstrates
+
+The goal of Clinic AI Helper is not to demonstrate that an LLM can answer messages.
+
+It demonstrates how an LLM can be integrated into a **stateful backend while keeping critical application behavior deterministic, testable, observable, and replaceable**.
